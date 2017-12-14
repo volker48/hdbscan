@@ -271,6 +271,7 @@ cdef class KDTreeBoruvkaAlgorithm (object):
     cdef object tree
     cdef object core_dist_tree
     cdef dist_metrics.DistanceMetric dist
+    cdef np.ndarray sample_weights
     cdef np.ndarray _data
     cdef np.double_t[:, ::1] _raw_data
     cdef np.double_t[:, :, ::1] node_bounds
@@ -314,7 +315,7 @@ cdef class KDTreeBoruvkaAlgorithm (object):
     cdef np.ndarray candidate_neighbor_arr
     cdef np.ndarray candidate_distance_arr
 
-    def __init__(self, tree, min_samples=5, metric='euclidean', leaf_size=20,
+    def __init__(self, tree, sample_weights=None, min_samples=5, metric='euclidean', leaf_size=20,
                  alpha=1.0, approx_min_span_tree=False, n_jobs=4, **kwargs):
 
         self.core_dist_tree = tree
@@ -322,6 +323,7 @@ cdef class KDTreeBoruvkaAlgorithm (object):
                            **kwargs)
         self._data = np.array(self.tree.data)
         self._raw_data = self.tree.data
+        self.sample_weights = sample_weights
         self.node_bounds = self.tree.node_bounds
         self.min_samples = min_samples
         self.alpha = alpha
@@ -423,7 +425,19 @@ cdef class KDTreeBoruvkaAlgorithm (object):
                 dualtree=True,
                 breadth_first=True)
 
-        self.core_distance_arr = knn_dist[:, self.min_samples].copy()
+        if self.sample_weights is not None:
+            # Use cumulative sum of weights to find the weighted nearest neighbour
+            # satisfying min_samples.
+            # TODO: This part might have the highest impact on performance.
+            self.core_distance_arr = np.empty(shape=(self.num_points), dtype='float64')
+            for idx in range(self.num_points):
+                idx_row = knn_indices[idx,:].reshape(1, -1)
+                cs = np.cumsum(self.sample_weights[idx_row])
+                weighted_idx = next(i for i,v in enumerate(cs) if v > self.min_samples)
+                self.core_distance_arr[idx] = knn_dist[idx, weighted_idx].copy()
+        else:
+            self.core_distance_arr = knn_dist[:, self.min_samples].copy()
+
         self.core_distance = (<np.double_t[:self.num_points:1]> (
             <np.double_t *> self.core_distance_arr.data))
 
