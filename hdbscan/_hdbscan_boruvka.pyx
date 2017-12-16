@@ -396,6 +396,15 @@ cdef class KDTreeBoruvkaAlgorithm (object):
         cdef np.ndarray[np.double_t, ndim=2] knn_dist
         cdef np.ndarray[np.intp_t, ndim=2] knn_indices
 
+        cdef np.intp_t idx
+        cdef np.intp_t weighted_idx
+        cdef np.ndarray[np.intp_t, ndim=1] idx_row
+
+        # Line below throws the following error:
+        # hdbscan\_hdbscan_boruvka.pyx:402:43: Buffer types only allowed as function local variables
+        # which seems to be completely wrong in this case.
+        # cdef np.ndarray[np.intp_t, ndim=1] cs
+
         # A shortcut: if we have a lot of points then we can split the points
         # into four piles and query them in parallel. On multicore systems
         # (most systems) this amounts to a 2x-3x wall clock improvement.
@@ -431,10 +440,10 @@ cdef class KDTreeBoruvkaAlgorithm (object):
             # TODO: This part might have the highest impact on performance.
             self.core_distance_arr = np.empty(shape=(self.num_points), dtype='float64')
             for idx in range(self.num_points):
-                idx_row = knn_indices[idx,:].reshape(1, -1)
+                idx_row = knn_indices[idx, :].reshape(1, -1).flatten()
                 cs = np.cumsum(self.sample_weights[idx_row])
-                weighted_idx = next(i for i,v in enumerate(cs) if v > self.min_samples)
-                self.core_distance_arr[idx] = knn_dist[idx, weighted_idx].copy()
+                weighted_idx = next(i for i, v in enumerate(cs) if v > self.min_samples)
+                self.core_distance_arr[idx] = knn_dist[idx, weighted_idx]
         else:
             self.core_distance_arr = knn_dist[:, self.min_samples].copy()
 
