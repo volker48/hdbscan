@@ -13,7 +13,7 @@ from sklearn.neighbors import KDTree, BallTree
 from sklearn.externals.joblib import Memory
 from sklearn.externals import six
 from warnings import warn
-from sklearn.utils import check_array
+from sklearn.utils import check_array, check_consistent_length
 from sklearn.externals.joblib.parallel import cpu_count
 
 from scipy.sparse import csgraph
@@ -799,6 +799,10 @@ class HDBSCAN(BaseEstimator, ClusterMixin):
             Returns self
         """
         X = check_array(X, accept_sparse='csr')
+        if sample_weights is not None:
+            sample_weights = np.asarray(sample_weights)
+            check_consistent_length(X, sample_weight)
+
         if self.metric != 'precomputed':
             self._raw_data = X
 
