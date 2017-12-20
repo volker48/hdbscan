@@ -265,7 +265,7 @@ def _hdbscan_boruvka_balltree(X, sample_weights=None, min_samples=5, alpha=1.0,
         X = X.astype(np.float64)
 
     tree = BallTree(X, metric=metric, leaf_size=leaf_size, **kwargs)
-    alg = BallTreeBoruvkaAlgorithm(tree, min_samples, metric=metric,
+    alg = BallTreeBoruvkaAlgorithm(tree, sample_weights, min_samples, metric=metric,
                                    leaf_size=leaf_size // 3,
                                    approx_min_span_tree=approx_min_span_tree,
                                    n_jobs=core_dist_n_jobs, **kwargs)
@@ -478,14 +478,14 @@ def hdbscan(X, sample_weights=None, min_cluster_size=5, min_samples=None, alpha=
         if algorithm == 'generic':
             (single_linkage_tree,
              result_min_span_tree) = memory.cache(
-                _hdbscan_generic)(X, min_samples, alpha, metric,
+                _hdbscan_generic)(X, sample_weights, min_samples, alpha, metric,
                                   p, leaf_size, gen_min_span_tree, **kwargs)
         elif algorithm == 'prims_kdtree':
             if metric not in KDTree.valid_metrics:
                 raise ValueError("Cannot use Prim's with KDTree for this"
                                  " metric!")
             (single_linkage_tree, result_min_span_tree) = memory.cache(
-                _hdbscan_prims_kdtree)(X, min_samples, alpha,
+                _hdbscan_prims_kdtree)(X, sample_weights, min_samples, alpha,
                                        metric, p, leaf_size,
                                        gen_min_span_tree, **kwargs)
         elif algorithm == 'prims_balltree':
@@ -493,7 +493,7 @@ def hdbscan(X, sample_weights=None, min_cluster_size=5, min_samples=None, alpha=
                 raise ValueError("Cannot use Prim's with BallTree for this"
                                  " metric!")
             (single_linkage_tree, result_min_span_tree) = memory.cache(
-                _hdbscan_prims_balltree)(X, min_samples, alpha,
+                _hdbscan_prims_balltree)(X, sample_weights, min_samples, alpha,
                                          metric, p, leaf_size,
                                          gen_min_span_tree, **kwargs)
         elif algorithm == 'boruvka_kdtree':
@@ -511,7 +511,7 @@ def hdbscan(X, sample_weights=None, min_cluster_size=5, min_samples=None, alpha=
                 raise ValueError("Cannot use Boruvka with BallTree for this"
                                  " metric!")
             (single_linkage_tree, result_min_span_tree) = memory.cache(
-                _hdbscan_boruvka_balltree)(X, min_samples, alpha,
+                _hdbscan_boruvka_balltree)(X, sample_weights, min_samples, alpha,
                                            metric, p, leaf_size,
                                            approx_min_span_tree,
                                            gen_min_span_tree,
@@ -523,7 +523,7 @@ def hdbscan(X, sample_weights=None, min_cluster_size=5, min_samples=None, alpha=
         if issparse(X) or metric not in FAST_METRICS:
             # We can't do much with sparse matrices ...
             (single_linkage_tree, result_min_span_tree) = memory.cache(
-                _hdbscan_generic)(X, min_samples,
+                _hdbscan_generic)(X, sample_weights, min_samples,
                                   alpha, metric, p, leaf_size,
                                   gen_min_span_tree, **kwargs)
         elif metric in KDTree.valid_metrics:
@@ -531,7 +531,7 @@ def hdbscan(X, sample_weights=None, min_cluster_size=5, min_samples=None, alpha=
             # still debugging for now
             if X.shape[1] > 60:
                 (single_linkage_tree, result_min_span_tree) = memory.cache(
-                    _hdbscan_prims_kdtree)(X, min_samples, alpha,
+                    _hdbscan_prims_kdtree)(X, sample_weights, min_samples, alpha,
                                            metric, p, leaf_size,
                                            gen_min_span_tree, **kwargs)
             else:
@@ -546,12 +546,12 @@ def hdbscan(X, sample_weights=None, min_cluster_size=5, min_samples=None, alpha=
             # still debugging for now
             if X.shape[1] > 60:
                 (single_linkage_tree, result_min_span_tree) = memory.cache(
-                    _hdbscan_prims_balltree)(X, min_samples, alpha,
+                    _hdbscan_prims_balltree)(X, sample_weights, min_samples, alpha,
                                              metric, p, leaf_size,
                                              gen_min_span_tree, **kwargs)
             else:
                 (single_linkage_tree, result_min_span_tree) = memory.cache(
-                    _hdbscan_boruvka_balltree)(X, min_samples, alpha,
+                    _hdbscan_boruvka_balltree)(X, sample_weights, min_samples, alpha,
                                                metric, p, leaf_size,
                                                approx_min_span_tree,
                                                gen_min_span_tree,
@@ -801,7 +801,7 @@ class HDBSCAN(BaseEstimator, ClusterMixin):
         X = check_array(X, accept_sparse='csr')
         if sample_weights is not None:
             sample_weights = np.asarray(sample_weights)
-            check_consistent_length(X, sample_weight)
+            check_consistent_length(X, sample_weights)
 
         if self.metric != 'precomputed':
             self._raw_data = X
