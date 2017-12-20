@@ -442,7 +442,12 @@ cdef class KDTreeBoruvkaAlgorithm (object):
             for idx in range(self.num_points):
                 idx_row = knn_indices[idx, :].reshape(1, -1).flatten()
                 cs = np.cumsum(self.sample_weights[idx_row])
-                weighted_idx = next(i for i, v in enumerate(cs) if v > self.min_samples)
+                print(self.sample_weights[idx_row])
+                print(cs)
+                print(self.min_samples)
+                print(knn_dist[idx, :])
+                # TODO: Using enumerate can be slower than a for loop with break, worth profiling.
+                weighted_idx = next(i for i, v in enumerate(cs) if v >= self.min_samples)
                 self.core_distance_arr[idx] = knn_dist[idx, weighted_idx]
         else:
             self.core_distance_arr = knn_dist[:, self.min_samples].copy()
@@ -905,6 +910,7 @@ cdef class BallTreeBoruvkaAlgorithm (object):
     cdef object tree
     cdef object core_dist_tree
     cdef dist_metrics.DistanceMetric dist
+    cdef np.ndarray sample_weights
     cdef np.ndarray _data
     cdef np.double_t[:, ::1] _raw_data
     cdef np.double_t alpha
@@ -947,7 +953,7 @@ cdef class BallTreeBoruvkaAlgorithm (object):
     cdef np.ndarray candidate_neighbor_arr
     cdef np.ndarray candidate_distance_arr
 
-    def __init__(self, tree, min_samples=5, metric='euclidean',
+    def __init__(self, tree, sample_weights=None, min_samples=5, metric='euclidean',
                  alpha=1.0, leaf_size=20, approx_min_span_tree=False, n_jobs=4,
                  **kwargs):
 
@@ -956,6 +962,7 @@ cdef class BallTreeBoruvkaAlgorithm (object):
                              **kwargs)
         self._data = np.array(self.tree.data)
         self._raw_data = self.tree.data
+        self.sample_weights = sample_weights
         self.min_samples = min_samples
         self.alpha = alpha
         self.approx_min_span_tree = approx_min_span_tree
@@ -1039,18 +1046,35 @@ cdef class BallTreeBoruvkaAlgorithm (object):
                 delayed(_core_dist_query,
                         check_pickle=False)
                 (self.core_dist_tree, points,
-                 self.min_samples)
+                 self.min_samples + 1)
                 for points in datasets)
             knn_dist = np.vstack([x[0] for x in knn_data])
             knn_indices = np.vstack([x[1] for x in knn_data])
         else:
             knn_dist, knn_indices = self.core_dist_tree.query(
                 self.tree.data,
-                k=self.min_samples,
+                k=self.min_samples + 1,
                 dualtree=True,
                 breadth_first=True)
 
-        self.core_distance_arr = knn_dist[:, self.min_samples - 1].copy()
+        if self.sample_weights is not None:
+            # Use cumulative sum of weights to find the weighted nearest neighbour
+            # satisfying min_samples.
+            # TODO: This part might have the highest impact on performance.
+            self.core_distance_arr = np.empty(shape=(self.num_points), dtype='float64')
+            for idx in range(self.num_points):
+                idx_row = knn_indices[idx,:].reshape(1, -1).flatten()
+                cs = np.cumsum(self.sample_weights[idx_row])
+                print(self.sample_weights[idx_row])
+                print(cs)
+                print(self.min_samples)
+                print(knn_dist[idx, :])
+                weighted_idx = next(i for i, v in enumerate(cs) if v >= self.min_samples)
+                self.core_distance_arr[idx] = knn_dist[idx, weighted_idx]
+        else:
+            # TODO: Why `self.min_samples - 1` was here, but not in KDTree?
+            self.core_distance_arr = knn_dist[:, self.min_samples].copy()
+
         self.core_distance = (<np.double_t[:self.num_points:1]> (
             <np.double_t *> self.core_distance_arr.data))
 
@@ -1059,6 +1083,7 @@ cdef class BallTreeBoruvkaAlgorithm (object):
         # get every point due to core_distance/mutual reachability distance
         # issues, but we'll get quite a few, and they are the hard ones to get,
         # so fill in any we ca and then run update components.
+
         for n in range(self.num_points):
             for i in range(self.min_samples - 1, 0):
                 m = knn_indices[n, i]
