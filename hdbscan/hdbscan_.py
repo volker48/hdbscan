@@ -4,6 +4,9 @@ HDBSCAN: Hierarchical Density-Based Spatial Clustering
          of Applications with Noise
 """
 
+import logging
+log = logging.getLogger('hdbscan_.py')
+
 import numpy as np
 
 from sklearn.base import BaseEstimator, ClusterMixin

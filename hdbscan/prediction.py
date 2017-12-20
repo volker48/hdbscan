@@ -3,6 +3,9 @@
 # to do this correctly, so we provide several methods for
 # the different use cases that may arise.
 
+import logging
+log = logging.getLogger('prediction.py')
+
 import numpy as np
 
 from sklearn.neighbors import KDTree, BallTree

@@ -57,6 +57,9 @@
 # we can perform more specific optimizations here for what
 # is a simpler version of the structure.
 
+import logging
+log = logging.getLogger('_hdbscan_boruvka.pyx')
+
 import numpy as np
 cimport numpy as np
 
@@ -442,10 +445,14 @@ cdef class KDTreeBoruvkaAlgorithm (object):
             for idx in range(self.num_points):
                 idx_row = knn_indices[idx, :].reshape(1, -1).flatten()
                 cs = np.cumsum(self.sample_weights[idx_row])
-                print(self.sample_weights[idx_row])
-                print(cs)
-                print(self.min_samples)
-                print(knn_dist[idx, :])
+                log.debug('self.sample_weights[idx_row]')
+                log.debug(self.sample_weights[idx_row])
+                log.debug('cs')
+                log.debug(cs)
+                log.debug('self.min_samples')
+                log.debug(self.min_samples)
+                log.debug('knn_dist[idx, :]')
+                log.debug(knn_dist[idx, :])
                 # TODO: Using enumerate can be slower than a for loop with break, worth profiling.
                 weighted_idx = next(i for i, v in enumerate(cs) if v >= self.min_samples)
                 self.core_distance_arr[idx] = knn_dist[idx, weighted_idx]
@@ -543,6 +550,11 @@ cdef class KDTreeBoruvkaAlgorithm (object):
                 continue
             self.edges[self.num_edges, 0] = source
             self.edges[self.num_edges, 1] = sink
+
+            log.debug('self.candidate_distance[component]')
+            log.debug(self.candidate_distance[component])
+            log.debug('self.dist._rdist_to_dist(self.candidate_distance[component])')
+            log.debug(self.dist._rdist_to_dist(self.candidate_distance[component]))
             self.edges[self.num_edges, 2] = self.dist._rdist_to_dist(
                 self.candidate_distance[component])
             self.num_edges += 1
@@ -620,6 +632,9 @@ cdef class KDTreeBoruvkaAlgorithm (object):
         whenever all points in query and reference nodes are in the same
         component."""
 
+        with gil:
+            log.debug('Doing the dual tree traversal')
+
         cdef np.intp_t[::1] point_indices1, point_indices2
 
         cdef np.intp_t i
@@ -667,12 +682,25 @@ cdef class KDTreeBoruvkaAlgorithm (object):
         # If the distance between the nodes is less than the current bound for
         # the query and the nodes are not in the same component continue;
         # otherwise we get to prune this branch and return early.
+        with gil:
+            log.debug('node_dist')
+            log.debug(node_dist)
+            log.debug('self.bounds_ptr[node1]')
+            log.debug(self.bounds_ptr[node1])
+            log.debug('self.component_of_node_ptr[node1]')
+            log.debug(self.component_of_node_ptr[node1])
+            log.debug('self.component_of_node_ptr[node2]')
+            log.debug(self.component_of_node_ptr[node2])
         if node_dist < self.bounds_ptr[node1]:
             if (self.component_of_node_ptr[node1] ==
                 self.component_of_node_ptr[node2] and
                     self.component_of_node_ptr[node1] >= 0):
+                with gil:
+                    log.debug('return 0 A')
                 return 0
         else:
+            with gil:
+                log.debug('return 0 B')
             return 0
 
         # Case 1: Both nodes are leaves
@@ -781,6 +809,8 @@ cdef class KDTreeBoruvkaAlgorithm (object):
                         self.bounds_ptr[parent] = new_bound
                         node1 = parent
                     else:
+                        with gil:
+                            log.debug('break A')
                         break
 
         # Case 2a: The query node is a leaf, or is smaller than
@@ -849,6 +879,8 @@ cdef class KDTreeBoruvkaAlgorithm (object):
                 self.dual_tree_traversal(right, node2)
                 self.dual_tree_traversal(left, node2)
 
+        with gil:
+            log.debug('return 0 C')
         return 0
 
     def spanning_tree(self):
@@ -1070,10 +1102,10 @@ cdef class BallTreeBoruvkaAlgorithm (object):
             for idx in range(self.num_points):
                 idx_row = knn_indices[idx,:].reshape(1, -1).flatten()
                 cs = np.cumsum(self.sample_weights[idx_row])
-                print(self.sample_weights[idx_row])
-                print(cs)
-                print(self.min_samples)
-                print(knn_dist[idx, :])
+                log.debug(self.sample_weights[idx_row])
+                log.debug(cs)
+                log.debug(self.min_samples)
+                log.debug(knn_dist[idx, :])
                 weighted_idx = next(i for i, v in enumerate(cs) if v >= self.min_samples)
                 self.core_distance_arr[idx] = knn_dist[idx, weighted_idx]
         else:
