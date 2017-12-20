@@ -883,16 +883,15 @@ cdef class KDTreeBoruvkaAlgorithm (object):
             log.debug('return 0 C')
         return 0
 
-    def spanning_tree(self):
+    cpdef spanning_tree(self):
         """Compute the minimum spanning tree of the data held by
         the tree passed in at construction"""
 
-        # cdef np.intp_t num_components
-        # cdef np.intp_t num_nodes
+        cdef np.intp_t num_components
+        cdef np.intp_t num_nodes
 
         num_components = self.tree.data.shape[0]
         num_nodes = self.tree.node_data.shape[0]
-        iteration = 0
         while num_components > 1:
             self.dual_tree_traversal(0, 0)
             num_components = self.update_components()
