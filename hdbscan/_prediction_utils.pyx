@@ -327,7 +327,8 @@ cpdef all_points_prob_in_some_cluster(
         np.ndarray[np.intp_t, ndim=1] clusters,
         np.ndarray tree,
         dict max_lambda_dict,
-        np.ndarray cluster_tree):
+        np.ndarray cluster_tree,
+        inf = float('inf')):
 
     cdef np.ndarray[np.float64_t, ndim=1] heights
     cdef np.intp_t num_points = tree['parent'].min()
