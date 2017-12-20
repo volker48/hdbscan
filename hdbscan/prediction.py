@@ -103,6 +103,9 @@ class PredictionData(object):
         self.raw_data = data
         self.tree = self._tree_type_map[tree_type](self.raw_data,
                                                    metric=metric, **kwargs)
+        # TODO: Line below throws:
+        # File "sklearn\neighbors\binary_tree.pxi", line 1298, in sklearn.neighbors.kd_tree.BinaryTree.query
+        # ValueError: k must be less than or equal to the number of training points
         self.core_distances = self.tree.query(data, k=min_samples)[0][:, -1]
         self.dist_metric = DistanceMetric.get_metric(metric, **kwargs)
 
@@ -496,6 +499,7 @@ def membership_vector(clusterer, points_to_predict):
     return result
 
 
+# TODO: Throws errors when no clusters
 def all_points_membership_vectors(clusterer):
     """Predict soft cluster membership vectors for all points in the
     original dataset the clusterer was trained on. This function is more
