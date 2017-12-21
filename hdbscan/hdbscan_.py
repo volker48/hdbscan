@@ -787,7 +787,7 @@ class HDBSCAN(BaseEstimator, ClusterMixin):
         self._outlier_scores = None
         self._prediction_data = None
 
-    def fit(self, X, sample_weights=None, min_samples=None, y=None):
+    def fit(self, X, y=None, sample_weights=None, min_samples=None):
         """Perform HDBSCAN clustering from features or distance matrix.
 
         Parameters
