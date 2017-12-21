@@ -199,7 +199,7 @@ cdef class UnionFind (object):
         return n
 
 
-cpdef np.ndarray[np.double_t, ndim=2] label(np.ndarray[np.double_t, ndim=2] L, sample_weights):
+cpdef np.ndarray[np.double_t, ndim=2] label(np.ndarray[np.double_t, ndim=2] L, sample_weights=None):
 
     cdef np.ndarray[np.double_t, ndim=2] result_arr
     cdef np.double_t[:, ::1] result
@@ -231,7 +231,7 @@ cpdef np.ndarray[np.double_t, ndim=2] label(np.ndarray[np.double_t, ndim=2] L, s
     return result_arr
 
 
-cpdef np.ndarray[np.double_t, ndim=2] single_linkage(distance_matrix, sample_weights):
+cpdef np.ndarray[np.double_t, ndim=2] single_linkage(distance_matrix, sample_weights=None):
 
     cdef np.ndarray[np.double_t, ndim=2] hierarchy
     cdef np.ndarray[np.double_t, ndim=2] for_labelling
