@@ -828,6 +828,7 @@ class HDBSCAN(BaseEstimator, ClusterMixin):
 
         return self
 
+    # TODO: Weighting?
     def fit_predict(self, X, y=None):
         """Performs clustering on X and returns cluster labels.
 
