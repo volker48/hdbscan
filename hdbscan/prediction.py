@@ -499,7 +499,6 @@ def membership_vector(clusterer, points_to_predict):
     return result
 
 
-# TODO: Throws errors when no clusters
 def all_points_membership_vectors(clusterer):
     """Predict soft cluster membership vectors for all points in the
     original dataset the clusterer was trained on. This function is more
@@ -520,15 +519,20 @@ def all_points_membership_vectors(clusterer):
     membership_vectors : array (n_samples, n_clusters)
         The probability that point ``i`` of the original dataset is a member of
         cluster ``j`` is in ``membership_vectors[i, j]``.
-        
+
     See Also
     --------
     :py:func:`hdbscan.predict.predict`
     :py:func:`hdbscan.predict.all_points_membership_vectors`
     """
+
     clusters = np.array(list(clusterer.condensed_tree_._select_clusters()
                              )).astype(np.intp)
     all_points = clusterer.prediction_data_.raw_data
+
+    # Throws errors when no clusters, possible solution: return array of 0's
+    if clusters.size == 0:
+        return np.zeros(all_points.shape[0])
 
     distance_vecs = all_points_dist_membership_vector(all_points,
                                                       clusterer.prediction_data_.exemplars,
