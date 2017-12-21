@@ -821,7 +821,7 @@ class HDBSCAN(BaseEstimator, ClusterMixin):
          self.cluster_persistence_,
          self._condensed_tree,
          self._single_linkage_tree,
-         self._min_spanning_tree) = hdbscan(X, sample_weights = sample_weights, **kwargs)
+         self._min_spanning_tree) = hdbscan(X, sample_weights=sample_weights, **kwargs)
 
         if self.prediction_data:
             self.generate_prediction_data()
