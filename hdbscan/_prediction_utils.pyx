@@ -357,32 +357,32 @@ cpdef all_points_prob_in_some_cluster(
         point_cluster = point_row['parent']
         point_lambda = point_row['lambda_val']
 
-        log.debug('Prints from all_points_prob_in_some_cluster')
-        log.debug(i)
-        log.debug(point_row)
-        log.debug(point)
-        log.debug(point_cluster)
-        log.debug(point_lambda)
+        # log.debug('Prints from all_points_prob_in_some_cluster')
+        # log.debug(i)
+        # log.debug(point_row)
+        # log.debug(point)
+        # log.debug(point_cluster)
+        # log.debug(point_lambda)
 
         # Can we not do a faster merge height operation here?
         heights = merge_height(point_cluster, point_lambda,
                                clusters, cluster_tree)
-        log.debug(heights)
-        log.debug(heights.argmax())
-        log.debug(clusters)
-        log.debug(clusters[heights.argmax()])
-        log.debug(max_lambda_dict)
-        log.debug(max_lambda_dict[clusters[heights.argmax()]])
+        # log.debug(heights)
+        # log.debug(heights.argmax())
+        # log.debug(clusters)
+        # log.debug(clusters[heights.argmax()])
+        # log.debug(max_lambda_dict)
+        # log.debug(max_lambda_dict[clusters[heights.argmax()]])
         max_lambda = max(max_lambda_dict[clusters[heights.argmax()]],
                          point_lambda)
-        log.debug(max_lambda)
+        # log.debug(max_lambda)
         # Comparison to float('inf') as being faster than math.isinf()
         if max_lambda == inf:
-            log.debug('I am an Inf!!! Returning 1')
+            # log.debug('I am an Inf!!! Returning 1')
             result[point] = 1
         else:
-            log.debug("Should be fine, returning the following prob:")
-            log.debug((heights.max() / max_lambda))
+            # log.debug("Should be fine, returning the following prob:")
+            # log.debug((heights.max() / max_lambda))
             result[point] = (heights.max() / max_lambda)
 
     return result
