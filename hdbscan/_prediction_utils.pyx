@@ -4,7 +4,7 @@
 # License: 3-clause BSD
 
 import logging
-log = logging.getLogger('_prediction_utils.pyx')
+log = logging.getLogger(__name__)
 
 import numpy as np
 cimport numpy as np
@@ -276,6 +276,9 @@ cpdef np.ndarray[np.float64_t, ndim=2] all_points_per_cluster_scores(
     cdef np.intp_t i, j
 
     result_arr = np.empty((num_points, clusters.shape[0]), dtype=np.float64)
+    log.debug('all_points_per_cluster_scores')
+    log.debug(num_points)
+    log.debug(np.asarray(clusters).shape)
     result = (<np.float64_t [:num_points, :clusters.shape[0]:1]>
                  (<np.float64_t *> result_arr.data))
 
@@ -305,19 +308,23 @@ cpdef np.ndarray[np.float64_t, ndim=2] all_points_outlier_membership_vector(
         np.ndarray cluster_tree,
         np.intp_t softmax=True):
 
+    log.debug('all_points_outlier_membership_vector')
     cdef np.ndarray[np.float64_t, ndim=2] per_cluster_scores
 
+    log.debug('Log A')
     per_cluster_scores = all_points_per_cluster_scores(
                                 clusters,
                                 tree,
                                 max_lambda_dict,
                                 cluster_tree)
+    log.debug('Log B')
     if softmax:
         result = np.exp(per_cluster_scores)
         result[~np.isfinite(result)] = np.finfo(np.double).max
     else:
         result = per_cluster_scores
 
+    log.debug('Log C')
     row_sums = result.sum(axis=1)
     result = result / row_sums[:, np.newaxis]
 

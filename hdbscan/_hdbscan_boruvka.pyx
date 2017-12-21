@@ -58,7 +58,7 @@
 # is a simpler version of the structure.
 
 import logging
-log = logging.getLogger('_hdbscan_boruvka.pyx')
+log = logging.getLogger(__name__)
 
 import numpy as np
 cimport numpy as np

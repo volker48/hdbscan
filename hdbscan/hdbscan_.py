@@ -5,7 +5,7 @@ HDBSCAN: Hierarchical Density-Based Spatial Clustering
 """
 
 import logging
-log = logging.getLogger('hdbscan_.py')
+log = logging.getLogger(__name__)
 
 import numpy as np
 

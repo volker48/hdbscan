@@ -4,7 +4,7 @@
 # the different use cases that may arise.
 
 import logging
-log = logging.getLogger('prediction.py')
+log = logging.getLogger(__name__)
 
 import numpy as np
 
