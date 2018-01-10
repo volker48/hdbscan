@@ -1121,7 +1121,7 @@ cdef class BallTreeBoruvkaAlgorithm (object):
         # so fill in any we ca and then run update components.
 
         for n in range(self.num_points):
-            for i in range(self.min_samples - 1, 0):
+            for i in range(1, self.min_samples + 1):
                 m = knn_indices[n, i]
                 if self.core_distance[m] <= self.core_distance[n]:
                     self.candidate_point[n] = n
