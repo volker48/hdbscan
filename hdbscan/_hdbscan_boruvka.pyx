@@ -453,8 +453,8 @@ cdef class KDTreeBoruvkaAlgorithm (object):
                 log.debug(self.min_samples)
                 log.debug('knn_dist[idx, :]')
                 log.debug(knn_dist[idx, :])
-                # TODO: Using enumerate can be slower than a for loop with break, worth profiling.
-                weighted_idx = next(i for i, v in enumerate(cs) if v >= self.min_samples)
+                # Based on https://stackoverflow.com/a/25032853/4272484
+                weighted_idx = np.searchsorted(cs, self.min_samples)
                 self.core_distance_arr[idx] = knn_dist[idx, weighted_idx]
         else:
             self.core_distance_arr = knn_dist[:, self.min_samples].copy()
