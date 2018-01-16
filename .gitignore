@@ -1,7 +1,9 @@
 build/*
 hdbscan/*.py[cod]
+hdbscan/*.c
 hdbscan/__pycache__/*
 dist/*
 *egg-info
 notebooks/.ipynb_checkpoints/*
-hdbscan/tests/*.pyc
+hdbscan/tests/*.py[cod]
+hdbscan/tests/*.c
