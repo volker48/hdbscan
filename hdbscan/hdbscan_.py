@@ -230,6 +230,8 @@ def _hdbscan_boruvka_kdtree(X, sample_weights=None, min_samples=5, alpha=1.0,
     if core_dist_n_jobs < 1:
         core_dist_n_jobs = max(cpu_count() + 1 + core_dist_n_jobs, 1)
 
+    # TODO: What about np.float32 if someone dosen't need 64 bits' precision?
+    # Shouldn't np.issubdtype(X.dtype, np.float) be used?
     if X.dtype != np.float64:
         X = X.astype(np.float64)
 
