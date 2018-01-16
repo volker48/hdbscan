@@ -63,6 +63,8 @@ log = logging.getLogger(__name__)
 import numpy as np
 cimport numpy as np
 
+import sys
+
 from libc.float cimport DBL_MAX
 from libc.math cimport fabs, pow
 
@@ -74,6 +76,7 @@ cimport dist_metrics as dist_metrics
 from sklearn.externals.joblib import Parallel, delayed
 
 cdef np.double_t INF = np.inf
+cdef np.intp_t INT_MAX = sys.maxint
 
 
 # Define the NodeData struct used in sklearn trees for faster
@@ -453,9 +456,17 @@ cdef class KDTreeBoruvkaAlgorithm (object):
                 log.debug(self.min_samples)
                 log.debug('knn_dist[idx, :]')
                 log.debug(knn_dist[idx, :])
-                # Based on https://stackoverflow.com/a/25032853/4272484
-                weighted_idx = np.searchsorted(cs, self.min_samples)
-                self.core_distance_arr[idx] = knn_dist[idx, weighted_idx]
+                if cs[self.min_samples] < self.min_samples:
+                    # If zero weights don't allow for a big enough cluster
+                    # return maximal possible core distance to ignore the point
+                    # under consideration.
+                    # TODO: INF would be more apporpriate, but is causingerrors
+                    # on later stages with spanning_tree() (hdbscan_.py 244)
+                    self.core_distance_arr[idx] = INT_MAX
+                else:
+                    # Based on https://stackoverflow.com/a/25032853/4272484
+                    weighted_idx = np.searchsorted(cs, self.min_samples)
+                    self.core_distance_arr[idx] = knn_dist[idx, weighted_idx]
         else:
             self.core_distance_arr = knn_dist[:, self.min_samples].copy()
 
