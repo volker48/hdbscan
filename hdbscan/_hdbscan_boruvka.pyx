@@ -57,8 +57,13 @@
 # we can perform more specific optimizations here for what
 # is a simpler version of the structure.
 
+import logging
+log = logging.getLogger(__name__)
+
 import numpy as np
 cimport numpy as np
+
+import sys
 
 from libc.float cimport DBL_MAX
 from libc.math cimport fabs, pow
@@ -71,6 +76,7 @@ cimport dist_metrics as dist_metrics
 from sklearn.externals.joblib import Parallel, delayed
 
 cdef np.double_t INF = np.inf
+cdef np.intp_t INT_MAX = sys.maxint if hasattr(sys, "maxint") else sys.maxsize
 
 
 # Define the NodeData struct used in sklearn trees for faster
@@ -271,6 +277,7 @@ cdef class KDTreeBoruvkaAlgorithm (object):
     cdef object tree
     cdef object core_dist_tree
     cdef dist_metrics.DistanceMetric dist
+    cdef np.ndarray sample_weights
     cdef np.ndarray _data
     cdef np.double_t[:, ::1] _raw_data
     cdef np.double_t[:, :, ::1] node_bounds
@@ -314,7 +321,7 @@ cdef class KDTreeBoruvkaAlgorithm (object):
     cdef np.ndarray candidate_neighbor_arr
     cdef np.ndarray candidate_distance_arr
 
-    def __init__(self, tree, min_samples=5, metric='euclidean', leaf_size=20,
+    def __init__(self, tree, sample_weights=None, min_samples=5, metric='euclidean', leaf_size=20,
                  alpha=1.0, approx_min_span_tree=False, n_jobs=4, **kwargs):
 
         self.core_dist_tree = tree
@@ -322,6 +329,7 @@ cdef class KDTreeBoruvkaAlgorithm (object):
                            **kwargs)
         self._data = np.array(self.tree.data)
         self._raw_data = self.tree.data
+        self.sample_weights = sample_weights
         self.node_bounds = self.tree.node_bounds
         self.min_samples = min_samples
         self.alpha = alpha
@@ -394,6 +402,15 @@ cdef class KDTreeBoruvkaAlgorithm (object):
         cdef np.ndarray[np.double_t, ndim=2] knn_dist
         cdef np.ndarray[np.intp_t, ndim=2] knn_indices
 
+        cdef np.intp_t idx
+        cdef np.intp_t weighted_idx
+        cdef np.ndarray[np.intp_t, ndim=1] idx_row
+
+        # Line below throws the following error:
+        # hdbscan\_hdbscan_boruvka.pyx:402:43: Buffer types only allowed as function local variables
+        # which seems to be completely wrong in this case.
+        # cdef np.ndarray[np.intp_t, ndim=1] cs
+
         # A shortcut: if we have a lot of points then we can split the points
         # into four piles and query them in parallel. On multicore systems
         # (most systems) this amounts to a 2x-3x wall clock improvement.
@@ -406,7 +423,7 @@ cdef class KDTreeBoruvkaAlgorithm (object):
                                           3*(self.num_points//4)]),
                 np.asarray(self.tree.data[3*(self.num_points//4):
                                           self.num_points])
-                        ]
+            ]
 
             knn_data = Parallel(n_jobs=self.n_jobs)(
                 delayed(_core_dist_query,
@@ -423,7 +440,36 @@ cdef class KDTreeBoruvkaAlgorithm (object):
                 dualtree=True,
                 breadth_first=True)
 
-        self.core_distance_arr = knn_dist[:, self.min_samples].copy()
+        if self.sample_weights is not None:
+            # Use cumulative sum of weights to find the weighted nearest neighbour
+            # satisfying min_samples.
+            # TODO: This part might have the highest impact on performance.
+            self.core_distance_arr = np.empty(shape=(self.num_points), dtype='float64')
+            for idx in range(self.num_points):
+                idx_row = knn_indices[idx, :].reshape(1, -1).flatten()
+                cs = np.cumsum(self.sample_weights[idx_row])
+                log.debug('self.sample_weights[idx_row]')
+                log.debug(self.sample_weights[idx_row])
+                log.debug('cs')
+                log.debug(cs)
+                log.debug('self.min_samples')
+                log.debug(self.min_samples)
+                log.debug('knn_dist[idx, :]')
+                log.debug(knn_dist[idx, :])
+                if cs[self.min_samples] < self.min_samples:
+                    # If zero weights don't allow for a big enough cluster
+                    # return maximal possible core distance to ignore the point
+                    # under consideration.
+                    # TODO: INF would be more apporpriate, but is causingerrors
+                    # on later stages with spanning_tree() (hdbscan_.py 244)
+                    self.core_distance_arr[idx] = INT_MAX
+                else:
+                    # Based on https://stackoverflow.com/a/25032853/4272484
+                    weighted_idx = np.searchsorted(cs, self.min_samples)
+                    self.core_distance_arr[idx] = knn_dist[idx, weighted_idx]
+        else:
+            self.core_distance_arr = knn_dist[:, self.min_samples].copy()
+
         self.core_distance = (<np.double_t[:self.num_points:1]> (
             <np.double_t *> self.core_distance_arr.data))
 
@@ -515,6 +561,11 @@ cdef class KDTreeBoruvkaAlgorithm (object):
                 continue
             self.edges[self.num_edges, 0] = source
             self.edges[self.num_edges, 1] = sink
+
+            log.debug('self.candidate_distance[component]')
+            log.debug(self.candidate_distance[component])
+            log.debug('self.dist._rdist_to_dist(self.candidate_distance[component])')
+            log.debug(self.dist._rdist_to_dist(self.candidate_distance[component]))
             self.edges[self.num_edges, 2] = self.dist._rdist_to_dist(
                 self.candidate_distance[component])
             self.num_edges += 1
@@ -592,6 +643,9 @@ cdef class KDTreeBoruvkaAlgorithm (object):
         whenever all points in query and reference nodes are in the same
         component."""
 
+        with gil:
+            log.debug('Doing the dual tree traversal')
+
         cdef np.intp_t[::1] point_indices1, point_indices2
 
         cdef np.intp_t i
@@ -639,12 +693,25 @@ cdef class KDTreeBoruvkaAlgorithm (object):
         # If the distance between the nodes is less than the current bound for
         # the query and the nodes are not in the same component continue;
         # otherwise we get to prune this branch and return early.
+        with gil:
+            log.debug('node_dist')
+            log.debug(node_dist)
+            log.debug('self.bounds_ptr[node1]')
+            log.debug(self.bounds_ptr[node1])
+            log.debug('self.component_of_node_ptr[node1]')
+            log.debug(self.component_of_node_ptr[node1])
+            log.debug('self.component_of_node_ptr[node2]')
+            log.debug(self.component_of_node_ptr[node2])
         if node_dist < self.bounds_ptr[node1]:
             if (self.component_of_node_ptr[node1] ==
                 self.component_of_node_ptr[node2] and
                     self.component_of_node_ptr[node1] >= 0):
+                with gil:
+                    log.debug('return 0 A')
                 return 0
         else:
+            with gil:
+                log.debug('return 0 B')
             return 0
 
         # Case 1: Both nodes are leaves
@@ -753,6 +820,8 @@ cdef class KDTreeBoruvkaAlgorithm (object):
                         self.bounds_ptr[parent] = new_bound
                         node1 = parent
                     else:
+                        with gil:
+                            log.debug('break A')
                         break
 
         # Case 2a: The query node is a leaf, or is smaller than
@@ -821,18 +890,19 @@ cdef class KDTreeBoruvkaAlgorithm (object):
                 self.dual_tree_traversal(right, node2)
                 self.dual_tree_traversal(left, node2)
 
+        with gil:
+            log.debug('return 0 C')
         return 0
 
-    def spanning_tree(self):
+    cpdef spanning_tree(self):
         """Compute the minimum spanning tree of the data held by
         the tree passed in at construction"""
 
-        # cdef np.intp_t num_components
-        # cdef np.intp_t num_nodes
+        cdef np.intp_t num_components
+        cdef np.intp_t num_nodes
 
         num_components = self.tree.data.shape[0]
         num_nodes = self.tree.node_data.shape[0]
-        iteration = 0
         while num_components > 1:
             self.dual_tree_traversal(0, 0)
             num_components = self.update_components()
@@ -882,6 +952,7 @@ cdef class BallTreeBoruvkaAlgorithm (object):
     cdef object tree
     cdef object core_dist_tree
     cdef dist_metrics.DistanceMetric dist
+    cdef np.ndarray sample_weights
     cdef np.ndarray _data
     cdef np.double_t[:, ::1] _raw_data
     cdef np.double_t alpha
@@ -924,7 +995,7 @@ cdef class BallTreeBoruvkaAlgorithm (object):
     cdef np.ndarray candidate_neighbor_arr
     cdef np.ndarray candidate_distance_arr
 
-    def __init__(self, tree, min_samples=5, metric='euclidean',
+    def __init__(self, tree, sample_weights=None, min_samples=5, metric='euclidean',
                  alpha=1.0, leaf_size=20, approx_min_span_tree=False, n_jobs=4,
                  **kwargs):
 
@@ -933,6 +1004,7 @@ cdef class BallTreeBoruvkaAlgorithm (object):
                              **kwargs)
         self._data = np.array(self.tree.data)
         self._raw_data = self.tree.data
+        self.sample_weights = sample_weights
         self.min_samples = min_samples
         self.alpha = alpha
         self.approx_min_span_tree = approx_min_span_tree
@@ -1002,32 +1074,54 @@ cdef class BallTreeBoruvkaAlgorithm (object):
         cdef np.ndarray[np.double_t, ndim=2] knn_dist
         cdef np.ndarray[np.intp_t, ndim=2] knn_indices
 
+        cdef np.intp_t idx
+        cdef np.intp_t weighted_idx
+        cdef np.ndarray[np.intp_t, ndim=1] idx_row
+
         if self.tree.data.shape[0] > 16384 and self.n_jobs > 1:
-            datasets = [np.asarray(self.tree.data[0:self.num_points//4]),
-                        np.asarray(self.tree.data[self.num_points//4:
-                                                  self.num_points//2]),
-                        np.asarray(self.tree.data[self.num_points//2:
-                                                  3*(self.num_points//4)]),
-                        np.asarray(self.tree.data[3*(self.num_points//4):
-                                                  self.num_points])
-                        ]
+            datasets = [
+                np.asarray(self.tree.data[0:self.num_points//4]),
+                np.asarray(self.tree.data[self.num_points//4:
+                                          self.num_points//2]),
+                np.asarray(self.tree.data[self.num_points//2:
+                                          3*(self.num_points//4)]),
+                np.asarray(self.tree.data[3*(self.num_points//4):
+                                          self.num_points])
+            ]
 
             knn_data = Parallel(n_jobs=self.n_jobs)(
                 delayed(_core_dist_query,
                         check_pickle=False)
                 (self.core_dist_tree, points,
-                 self.min_samples)
+                 self.min_samples + 1)
                 for points in datasets)
             knn_dist = np.vstack([x[0] for x in knn_data])
             knn_indices = np.vstack([x[1] for x in knn_data])
         else:
             knn_dist, knn_indices = self.core_dist_tree.query(
                 self.tree.data,
-                k=self.min_samples,
+                k=self.min_samples + 1,
                 dualtree=True,
                 breadth_first=True)
 
-        self.core_distance_arr = knn_dist[:, self.min_samples - 1].copy()
+        if self.sample_weights is not None:
+            # Use cumulative sum of weights to find the weighted nearest neighbour
+            # satisfying min_samples.
+            # TODO: This part might have the highest impact on performance.
+            self.core_distance_arr = np.empty(shape=(self.num_points), dtype='float64')
+            for idx in range(self.num_points):
+                idx_row = knn_indices[idx,:].reshape(1, -1).flatten()
+                cs = np.cumsum(self.sample_weights[idx_row])
+                log.debug(self.sample_weights[idx_row])
+                log.debug(cs)
+                log.debug(self.min_samples)
+                log.debug(knn_dist[idx, :])
+                weighted_idx = next(i for i, v in enumerate(cs) if v >= self.min_samples)
+                self.core_distance_arr[idx] = knn_dist[idx, weighted_idx]
+        else:
+            # TODO: Why `self.min_samples - 1` was here, but not in KDTree?
+            self.core_distance_arr = knn_dist[:, self.min_samples].copy()
+
         self.core_distance = (<np.double_t[:self.num_points:1]> (
             <np.double_t *> self.core_distance_arr.data))
 
@@ -1036,8 +1130,9 @@ cdef class BallTreeBoruvkaAlgorithm (object):
         # get every point due to core_distance/mutual reachability distance
         # issues, but we'll get quite a few, and they are the hard ones to get,
         # so fill in any we ca and then run update components.
+
         for n in range(self.num_points):
-            for i in range(self.min_samples - 1, 0):
+            for i in range(1, self.min_samples + 1):
                 m = knn_indices[n, i]
                 if self.core_distance[m] <= self.core_distance[n]:
                     self.candidate_point[n] = n

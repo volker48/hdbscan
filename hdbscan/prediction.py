@@ -3,6 +3,9 @@
 # to do this correctly, so we provide several methods for
 # the different use cases that may arise.
 
+import logging
+log = logging.getLogger(__name__)
+
 import numpy as np
 
 from sklearn.neighbors import KDTree, BallTree
@@ -101,6 +104,11 @@ class PredictionData(object):
         self.raw_data = data.astype(np.float64)
         self.tree = self._tree_type_map[tree_type](self.raw_data,
                                                    metric=metric, **kwargs)
+        # TODO: Line below throws:
+        # File "sklearn\neighbors\binary_tree.pxi", line 1298,
+        # in sklearn.neighbors.kd_tree.BinaryTree.query
+        # ValueError:
+        #     k must be less than or equal to the number of training points
         self.core_distances = self.tree.query(data, k=min_samples)[0][:, -1]
         self.dist_metric = DistanceMetric.get_metric(metric, **kwargs)
 

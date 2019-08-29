@@ -3,6 +3,9 @@
 # Authors: Leland McInnes
 # License: 3-clause BSD
 
+import logging
+log = logging.getLogger(__name__)
+
 import numpy as np
 cimport numpy as np
 
@@ -274,6 +277,9 @@ cpdef np.ndarray[np.float64_t, ndim=2] all_points_per_cluster_scores(
     cdef np.intp_t i, j
 
     result_arr = np.empty((num_points, clusters.shape[0]), dtype=np.float64)
+    log.debug('all_points_per_cluster_scores')
+    log.debug(num_points)
+    log.debug(np.asarray(clusters).shape)
     result = (<np.float64_t [:num_points, :clusters.shape[0]:1]>
                  (<np.float64_t *> result_arr.data))
 
@@ -303,13 +309,16 @@ cpdef np.ndarray[np.float64_t, ndim=2] all_points_outlier_membership_vector(
         np.ndarray cluster_tree,
         np.intp_t softmax=True):
 
+    log.debug('all_points_outlier_membership_vector')
     cdef np.ndarray[np.float64_t, ndim=2] per_cluster_scores
 
+    log.debug('Log A')
     per_cluster_scores = all_points_per_cluster_scores(
                                 clusters,
                                 tree,
                                 max_lambda_dict,
                                 cluster_tree)
+    log.debug('Log B')
     if softmax:
         # Scale for numerical stability, mathematically equivalent with old
         # version due to the scaling with the sum in below.
@@ -318,6 +327,7 @@ cpdef np.ndarray[np.float64_t, ndim=2] all_points_outlier_membership_vector(
     else:
         result = per_cluster_scores
 
+    log.debug('Log C')
     row_sums = result.sum(axis=1)
     result = result / row_sums[:, np.newaxis]
 
@@ -327,7 +337,8 @@ cpdef all_points_prob_in_some_cluster(
         np.ndarray[np.intp_t, ndim=1] clusters,
         np.ndarray tree,
         dict max_lambda_dict,
-        np.ndarray cluster_tree):
+        np.ndarray cluster_tree,
+        inf = float('inf')):
 
     cdef np.ndarray[np.float64_t, ndim=1] heights
     cdef np.intp_t num_points = tree['parent'].min()
@@ -349,11 +360,32 @@ cpdef all_points_prob_in_some_cluster(
         point_cluster = point_row['parent']
         point_lambda = point_row['lambda_val']
 
+        # log.debug('Prints from all_points_prob_in_some_cluster')
+        # log.debug(i)
+        # log.debug(point_row)
+        # log.debug(point)
+        # log.debug(point_cluster)
+        # log.debug(point_lambda)
+
         # Can we not do a faster merge height operation here?
         heights = merge_height(point_cluster, point_lambda,
                                clusters, cluster_tree)
+        # log.debug(heights)
+        # log.debug(heights.argmax())
+        # log.debug(clusters)
+        # log.debug(clusters[heights.argmax()])
+        # log.debug(max_lambda_dict)
+        # log.debug(max_lambda_dict[clusters[heights.argmax()]])
         max_lambda = max(max_lambda_dict[clusters[heights.argmax()]],
                          point_lambda)
-        result[point] = (heights.max() / max_lambda)
+        # log.debug(max_lambda)
+        # Comparison to float('inf') as being faster than math.isinf()
+        if max_lambda == inf:
+            # log.debug('I am an Inf!!! Returning 1')
+            result[point] = 1
+        else:
+            # log.debug("Should be fine, returning the following prob:")
+            # log.debug((heights.max() / max_lambda))
+            result[point] = (heights.max() / max_lambda)
 
     return result
